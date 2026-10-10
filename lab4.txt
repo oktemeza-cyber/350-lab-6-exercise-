@@ -1,1 +1,13 @@
 Answer written questions here:
+
+1. Starting at a low number reduces the size of calculations required in manelbrotSmooth--allowing for more responsiveness 
+from the application and a smoother zoom. Starting at a higher number can severely increase lag due to a higher number of 
+computations within the function, since each calculation MUST be done before moving onto the next one.
+
+2. Since each pixel is not reliant on another for it's rendering, we could split the rendering by rows or columns and 
+render row by row in a function--returning the row rendered and moving onto the next one. Once all rows are rendered, 
+we can simply render it all together to create a full image.
+
+3. It would average out the colour within the pixel itself. This would result in a more smoother 
+visual rather than the jagged edges we see in our current product, but a much slower process as you are 
+calculating a subpixel within a pixel, preforming 4 times the calls per frame.
