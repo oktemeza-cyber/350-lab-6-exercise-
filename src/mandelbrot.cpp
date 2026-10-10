@@ -151,6 +151,22 @@ void MandelbrotViewer::handleZoom(double scrollDistance, sf::Vector2i mousePosit
     // In particular, the new world-coordinates rectangle will be of size
     // (worldViewFactor * (orig world width), worldViewFactor * (orig world height)),
     // and the user's cursor will point to exactly the same thing before and after the zoom.
+    sf::Vector2<double> worldPoint = windowPosToWorld(sf::Vector2<double>(mousePosition));
+
+    double fx = static_cast<double>(mousePosition.x) / mWindowSize.x;
+    double newWidth = (mMaxPointWorld.x - mMinPointWorld.x) * std::pow(ZOOM_EXPONENT_BASE, scrollDistance);
+    double newMinX = (worldPoint.x - (fx*newWidth));
+    double newMaxPointWorldX = (newMinX + newWidth);
+    mMinPointWorld.x = newMinX;
+    mMaxPointWorld.x = newMaxPointWorldX;
+
+    double fy = static_cast<double>(mousePosition.y) / mWindowSize.y;
+    double newHeight = (mMaxPointWorld.y - mMinPointWorld.y) * std::pow(ZOOM_EXPONENT_BASE, scrollDistance);
+    double newMaxY = (worldPoint.y + (fy*newHeight));
+    double newMinPointWorldY = (newMaxY - newHeight);
+    mMinPointWorld.y = newMinPointWorldY;
+    mMaxPointWorld.y = newMaxY ;
+
 }
 
 void MandelbrotViewer::handleWindowResize(sf::Vector2u newSize)  // newSize is in window coords.
@@ -158,22 +174,29 @@ void MandelbrotViewer::handleWindowResize(sf::Vector2u newSize)  // newSize is i
     // IMPORTANT: after resizing window, need to fix view, or else original world
     // rectangle gets scaled to new window size instead. This line ensures that when the window
     // expands, "more of the world" is correspondingly viewable.
-    mWindow.setView(sf::View(
-        sf::FloatRect({0, 0}, {static_cast<float>(newSize.x), static_cast<float>(newSize.y)})));
+    mWindow.setView(sf::View(sf::FloatRect({0, 0}, {static_cast<float>(newSize.x), static_cast<float>(newSize.y)})));
+    double centerX = (mMinPointWorld.x + mMaxPointWorld.x) / 2;
+    double centerY = (mMinPointWorld.y + mMaxPointWorld.y) / 2;
 
-    // TODO: handle window resizes. In particular, update mMinPointWorld and mMaxPointWorld
-    //       such that the world view is the same aspect ratio as the new window size (such that
-    //       the world view is not distorted), and centered around the same world point they used to
-    //       be. The rectangle's size in each dimension is scaled by the same factor as the window
-    //       was scaled in the respective dimension, such that the original view is only
-    //       cropped/extended, not zoomed.
-    // ... your code here...
+    double scaleX = static_cast<double>(newSize.x )/ mWindowSize.x;
+    double newWidth = scaleX * (mMaxPointWorld.x - mMinPointWorld.x);
+    double newMinX = centerX - (newWidth/2);
+    double newMaxX = centerX + (newWidth/2);
+
+    mMinPointWorld.x = newMinX;
+    mMaxPointWorld.x = newMaxX;
+
+    double scaleY = static_cast<double>(newSize.y )/ mWindowSize.y;
+    double newHeight = scaleY * (mMaxPointWorld.y - mMinPointWorld.y);
+    double newMinY = centerY - (newHeight/2);
+    double newMaxY = centerY + (newHeight/2);
+
+    mMinPointWorld.y = newMinY;
+    mMaxPointWorld.y = newMaxY;
 
     // update CPU-side image buffer size to have enough memory for all the pixels:
     mViewBuffer.resize(newSize);
-    // TODO: update mViewBufferGPU so that it has enough memory for all the pixels in the new window
-    // size
-    //      Hint: (void)mViewBufferGPU.resize ... something ... this is a trivial one-liner.
+     mViewBufferGPU.resize(newSize);
     // The sprite will have an incorrect view into the texture after resize, so we update:
     mViewSprite.setTextureRect(sf::IntRect({0, 0}, sf::Vector2i(newSize)));
     mWindowSize = newSize;  // update mWindowSize.
@@ -207,7 +230,7 @@ double MandelbrotViewer::mandelbrot(double cX, double cY, int maxIters) const {
     double zY = 0;
 
     for(int n = 1; n <= maxIters; n++){
-        double zPrimeX = pow(zX, 2) - pow(zY, 2) + cX;
+        double zPrimeX = zX*zX - zY*zY + cX;
         double zPrimeY = 2 * (zX * zY) + cY;
 
         zX = zPrimeX;
@@ -220,19 +243,25 @@ double MandelbrotViewer::mandelbrot(double cX, double cY, int maxIters) const {
 }
 
 double MandelbrotViewer::mandelbrotSmooth(double cX, double cY, int maxIters) const {
-    // TODO: return the smoothed number of iterations it takes for z to escape a radius of greater
-    //       than 2, if it happens within maxIters iterations, otherwise return infinity.
-    //       If you use an escape radius of exactly 2, you will see some artifacts. Use a
-    //       higher radius (this is still correct, since divergence -> infty), but with more
-    //       computational cost (since you need to simulate more steps).
-    return std::numeric_limits<double>::infinity();  // get rid of this and add your code here...
+    double zX = 0;
+    double zY = 0;
+
+    for(int n = 1; n <= maxIters; n++){
+        double zPrimeX = zX*zX - zY*zY + cX;
+        double zPrimeY = 2 * (zX * zY) + cY;
+
+        zX = zPrimeX;
+        zY = zPrimeY;
+        if(zPrimeX * zPrimeX + zPrimeY * zPrimeY > 16) {
+            double zN = std::sqrt((zPrimeX * zPrimeX) + (zPrimeY*zPrimeY));
+            return (n + 1 - std::log(std::log(zN)) / LOG_2);
+        }
+    }
+    return std::numeric_limits<double>::infinity();  
 }
 
 // windowPosToWorld takes a point in window coordinates and converts it to world coordinates
 sf::Vector2<double> MandelbrotViewer::windowPosToWorld(const sf::Vector2<double>& pWindow) {
-    // TODO: given a point in window coordinates (by default SFML gives these as sf::Vector2i,
-    //       the caller will have to cast to sf::Vector2<double>), convert them into world
-    //       coordinates in the context of the current world view.
     double fractionX = pWindow.x / mWindowSize.x;
     double worldX = mMinPointWorld.x + (fractionX * (mMaxPointWorld.x - mMinPointWorld.x));
 
@@ -249,7 +278,7 @@ void MandelbrotViewer::drawIntoViewBuffer(int maxIters) {
     for(unsigned int px = 0; px < mViewBuffer.getSize().x; px++){
         for(unsigned int py = 0; py < mViewBuffer.getSize().y; py++){
             sf::Vector2<double> world = windowPosToWorld({px + 0.5, py + 0.5});
-            double escapeTime = mandelbrot(world.x, world.y, maxIters);
+            double escapeTime = mandelbrotSmooth(world.x, world.y, maxIters);
             sf::Color colour;
             if(escapeTime != std::numeric_limits<double>::infinity()){
                 colour = CyclicGradient::DEFAULT_GRADIENT(escapeTime);
