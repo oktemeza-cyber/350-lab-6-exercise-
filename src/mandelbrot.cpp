@@ -203,10 +203,20 @@ void MandelbrotViewer::updateUIText(sf::Vector2i mouseWindowCoords) {
 }
 
 double MandelbrotViewer::mandelbrot(double cX, double cY, int maxIters) const {
-    // TODO: return the number of iterations it takes for z to escape a radius of 2,
-    //       if it happens within maxIters iterations, otherwise return infinity.
+    double zX = 0;
+    double zY = 0;
 
-    return std::numeric_limits<double>::infinity();  // get rid of this and add your code here...
+    for(int n = 1; n <= maxIters; n++){
+        double zPrimeX = pow(zX, 2) - pow(zY, 2) + cX;
+        double zPrimeY = 2 * (zX * zY) + cY;
+
+        zX = zPrimeX;
+        zY = zPrimeY;
+        if(zPrimeX * zPrimeX + zPrimeY * zPrimeY > 4) {
+            return n;
+        }
+    }
+    return std::numeric_limits<double>::infinity();
 }
 
 double MandelbrotViewer::mandelbrotSmooth(double cX, double cY, int maxIters) const {
@@ -223,27 +233,38 @@ sf::Vector2<double> MandelbrotViewer::windowPosToWorld(const sf::Vector2<double>
     // TODO: given a point in window coordinates (by default SFML gives these as sf::Vector2i,
     //       the caller will have to cast to sf::Vector2<double>), convert them into world
     //       coordinates in the context of the current world view.
+    double fractionX = pWindow.x / mWindowSize.x;
+    double worldX = mMinPointWorld.x + (fractionX * (mMaxPointWorld.x - mMinPointWorld.x));
 
-    return {};
+    double fractionY = pWindow.y / mWindowSize.y;
+    double worldY = mMaxPointWorld.y + (fractionY * (mMinPointWorld.y - mMaxPointWorld.y));
+
+    return sf::Vector2<double>{worldX, worldY};
+
 }
 
 // drawIntoBuffer renders the current world view (bounded by mMinPointWorld and mMaxPointWorld)
 // into mViewBuffer
 void MandelbrotViewer::drawIntoViewBuffer(int maxIters) {
-    // TODO: render into mViewBuffer using sf::Image's setPixel method, which has signature
-    //          void sf::Image::setPixel(sf::Vector2u coords, sf::Color color)
-    //       At each pixel, find the world coordinates corresponding to the **CENTER** of the pixel.
-    //       Then, find the (possibly continuous) number of iterations it takes for z to escape
-    //       the escape radius (using mandelbrotSmooth() or mandelbrot()). If it never escapes,
-    //       color the pixel black, otherwise, pass the escape iteration number to
-    //       CyclicGradient::DEFAULT_GRADIENT(n) to get a colour to set the pixel to.
+    for(unsigned int px = 0; px < mViewBuffer.getSize().x; px++){
+        for(unsigned int py = 0; py < mViewBuffer.getSize().y; py++){
+            sf::Vector2<double> world = windowPosToWorld({px + 0.5, py + 0.5});
+            double escapeTime = mandelbrot(world.x, world.y, maxIters);
+            sf::Color colour;
+            if(escapeTime != std::numeric_limits<double>::infinity()){
+                colour = CyclicGradient::DEFAULT_GRADIENT(escapeTime);
+            } else {
+                colour = sf::Color::Black;
+            }
+        mViewBuffer.setPixel(sf::Vector2u{px, py}, colour); 
+    }
+}
 }
 
 // copyViewBufferToGPU takes the drawn CPU-side buffer mViewBuffer and copies it to the
 // GPU-side.
 void MandelbrotViewer::copyViewBufferToGPU() {
-    // TODO: load mViewBuffer from the CPU into mViewBufferGPU on the GPU.
-    // Hint: this is a one-liner.
+    mViewBufferGPU.update(mViewBuffer);
 }
 
 // draw clears the window, draws the view, as well as the text with its shadow underneath
